@@ -1,10 +1,12 @@
-import { useParams } from 'react-router-dom'
-import { useState, FormEvent, Children } from 'react'
-import { useAuth } from '../hooks/useAuth'
-import { getDatabase, ref, push } from 'firebase/database'
+import { useParams, useNavigate } from 'react-router-dom'
+import { Children } from 'react'
+import { getDatabase, ref, remove, update } from 'firebase/database'
 
 
 import logoImg from '../assets/images/logo.svg'
+import deleteImg from '../assets/images/delete.svg'
+import checkImg from '../assets/images/check.svg'
+import answerImg from '../assets/images/answer.svg'
 import { useRoom } from '../hooks/useRoom'
 import { Button } from '../components/Button'
 import { RoomCode } from '../components/RoomCode'
@@ -17,38 +19,43 @@ type RoomParams = {
 }
 
 export function AdminRoom() {
-    const { user } = useAuth()
+    const navigate = useNavigate()
     const params = useParams<RoomParams>()
     const roomId = params.id
-    const [newQuestion, setNewQuestion] = useState('')
     const db = getDatabase()
     const { questions, title } = useRoom(roomId)
 
-    async function handleSendQuestion(event: FormEvent) {
-        event.preventDefault()
-        if (newQuestion.trim() === '') {
-            return
-        }
+    async function handleEndRoom() {
+        const roomRef = ref(db, `rooms/${roomId}`)
+        await update(roomRef, {
+            endedAt: new Date()
+        })
 
-        if (!user) {
-            throw new Error('You must be logged in')
-        }
-
-        const question = {
-            content: newQuestion,
-            author: {
-                name: user?.name,
-                avatar: user?.avatar
-            },
-            isHighlighted: false,
-            isAnswered: false
-        }
-
-        const roomRef = ref(db, `rooms/${roomId}/questions`)
-        await push(roomRef, question)
-
-        setNewQuestion('')
+        navigate('/')
     }
+
+    async function handleDeleteQuestion(questionId: string) {
+        const questionRef = ref(db, `rooms/${roomId}/questions/${questionId}`)
+        if (window.confirm('Tem certeza que deseja excluir essa pergunta?')) {
+            await remove(questionRef)
+        }
+    }
+
+    async function handleCheckQuestionAsAnswered(questionId: string) {
+        const questionRef = ref(db, `rooms/${roomId}/questions/${questionId}`)
+        await update(questionRef, {
+            isAnswered: true
+        })
+    }
+
+    async function handleHighlightQuestion(questionId: string) {
+        const questionRef = ref(db, `rooms/${roomId}/questions/${questionId}`)
+        await update(questionRef, {
+            isHighlighted: true
+        })
+    }
+
+
 
     return (
         <div id="page-room">
@@ -57,7 +64,7 @@ export function AdminRoom() {
                     <img src={logoImg} alt="Letmeask" />
                     <div>
                         <RoomCode code={roomId} />
-                        <Button isOutlined>Encerrar Sala</Button>
+                        <Button isOutlined onClick={handleEndRoom}>Encerrar Sala</Button>
                     </div>
                 </div>
             </header>
@@ -75,7 +82,32 @@ export function AdminRoom() {
                             <Question
                                 content={question.content}
                                 author={question.author}
-                            />
+                                isAnswered={question.isAnswered}
+                                isHighlighted={question.isHighlighted}
+                            >
+                                {!question.isAnswered && (
+                                    <>
+                                        <button
+                                            type='button'
+                                            onClick={() => handleCheckQuestionAsAnswered(question.id)}
+                                        >
+                                            <img src={checkImg} alt="Marcar pergunta como repondida" />
+                                        </button>
+                                        <button
+                                            type='button'
+                                            onClick={() => handleHighlightQuestion(question.id)}
+                                        >
+                                            <img src={answerImg} alt="Destacar pergunta" />
+                                        </button>
+                                    </>
+                                )}
+                                <button
+                                    type='button'
+                                    onClick={() => handleDeleteQuestion(question.id)}
+                                >
+                                    <img src={deleteImg} alt="Remover pergunta" />
+                                </button>
+                            </Question>
                         )
                     }))}
                 </div>
